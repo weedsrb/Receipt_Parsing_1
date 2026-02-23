@@ -15,7 +15,7 @@ def parse_receipt(file_path, config):
     receipt = {}
     previous_line = "" 
 
-    with open(file_path, "r", encoding="utf-16") as file:
+    with open(file_path, "r", encoding=config["encoding"]) as file:
                    
         item_pattern = config["items"]["pattern"].format(
         separator=config["items"]["separator"],
@@ -56,7 +56,7 @@ def parse_receipt(file_path, config):
 
                 items_list.append(item)
 
-                receipt["Items"] = items_list
+                receipt["items"] = items_list
             
             previous_line = line
 
