@@ -1,50 +1,65 @@
 import re
 import json
+import yaml
 
-def parse_receipt(file_path):
+def convert_type(key, value, config):
+    if key in config["types"]["float"]:
+        return float(value)
+    if key in config["types"]["int"]:
+        return int(value)
+    return value
+
+def parse_receipt(file_path, config):
     
     items_list = []
     receipt = {}
-    previous_line = None
-    dt_pattern = r"(\d+[-/.]\d+[-/.]\d+)\s+(\d{2}:\d{2}:\d{2})"
-    item_pattern = r"(\d+)\s+x\s+\$(\d+\.\d{2})"
+    previous_line = "" 
 
     with open(file_path, "r", encoding="utf-16") as file:
+                   
+        item_pattern = config["items"]["pattern"].format(
+        separator=config["items"]["separator"],
+        currency=re.escape(config["currency"]))
         
         for line in file:
 
             line = line.strip()
-            dt_match = re.search(dt_pattern, line)
             item_match = re.search(item_pattern, line)
 
+            # Everything but the date/time and items should be in key:value format.
             if ":" in line and line.count(":") < 2:
+
+                line = line.strip().replace(config["currency"], "")
+                
                 key, value = line.split(":", 1)
-                receipt[key.strip()] = value.strip()
+                clean_key = key.strip().lower()
+                value = value.strip()
+                value = convert_type(clean_key, value, config)
+                receipt[clean_key] = value
 
-            # elif ":" in line and line.count(":") >= 2:
-            #     date, time = line.split(" ", 1)
-            #     receipt["Date"] = date.strip()
-            #     receipt["Time"] = time.strip()
+            # Date and time might not be on the same line, so we check for both patterns indepandantly.
+            for rule in config["date_time"]:
 
-            elif dt_match:
-                receipt["Date"], receipt["Time"] = dt_match.groups()
-            
-            elif item_match:
-                quantity, price = item_match.groups()
+                match = re.search(rule["pattern"], line)
+
+                if match:
+                    receipt[rule["field"]] = match.group(0)
+                      
+            # Items are often on the line after the item name, so we use the previous line as the item name if we find a match for quantity and price.
+            if item_match:
+                
                 item = {
                     "name": previous_line.strip(),
-                    "quantity": quantity.strip(),
-                    "price": price.split()[0].strip()
+                    "quantity": convert_type("quantity", item_match.group(1), config),
+                    "price": convert_type("price", item_match.group(2), config)   
                 }
+
                 items_list.append(item)
+
                 receipt["Items"] = items_list
             
             previous_line = line
 
-    output_path = file_path.rsplit(".", 1)[0] + ".json"
-    with open(output_path, "w", encoding="utf-8") as json_file:
-        json.dump(receipt, json_file, indent=4)
-    print(f"Exported to {output_path}")
+    print(json.dumps(receipt, indent=4))
 
-
-parse_receipt("data/receipt.txt")
+parse_receipt("data/receipt.txt", yaml.safe_load(open("config/config.yaml")))
